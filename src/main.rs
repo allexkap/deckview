@@ -1,4 +1,5 @@
 use egui::{emath, pos2, Color32, Painter, Pos2, Rect, Stroke};
+use rusqlite::{types, Connection};
 
 const NAMES: [&str; 3] = ["asd", "qwe", "zxc"];
 
@@ -10,57 +11,135 @@ fn main() -> eframe::Result {
         ..Default::default()
     };
     eframe::run_native(
-        "My egui App",
+        "Deckview",
         options,
         Box::new(|_cc| Ok(Box::<MyApp>::default())),
     )
 }
 
-fn load_test_data() -> Vec<[u64; 2]> {
-    std::fs::read_to_string("data.in")
-        .unwrap()
-        .split_whitespace()
-        .map(|s| s.parse().unwrap())
-        .collect::<Vec<u64>>()
-        .chunks(2)
-        .map(|c| [c[0], c[1]])
-        .collect()
+enum EventType {
+    Running = 0,
+    Started,
+    Stopped,
+    Suspended,
+    Resumed,
 }
 
-type Segments = Vec<[Pos2; 2]>;
+impl types::FromSql for EventType {
+    fn column_result(value: types::ValueRef<'_>) -> types::FromSqlResult<Self> {
+        match value.as_i64()? {
+            0 => Ok(EventType::Running),
+            1 => Ok(EventType::Started),
+            2 => Ok(EventType::Stopped),
+            3 => Ok(EventType::Suspended),
+            4 => Ok(EventType::Resumed),
+            i => Err(rusqlite::types::FromSqlError::OutOfRange(i)),
+        } // ._.
+    }
+}
 
-fn ts_to_segments(timestamps: Vec<[u64; 2]>, start_ts: u64, x_size: u32, y_count: u32) -> Segments {
-    let mut lines_segments: Segments = Vec::new();
+struct Segments(Vec<[Pos2; 2]>);
 
-    let max_ts = start_ts + x_size as u64 * y_count as u64 - 1;
+impl std::ops::Deref for Segments {
+    type Target = Vec<[Pos2; 2]>;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+impl std::ops::DerefMut for Segments {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
 
-    for segment in timestamps {
-        if segment[1] < segment[0] || segment[1] < start_ts || segment[0] > max_ts {
-            continue;
-        }
-
-        let points = [
-            std::cmp::max(segment[0], start_ts),
-            std::cmp::min(segment[1], max_ts),
-        ]
-        .map(|ts| {
-            let pos = (ts - start_ts) as f32 / x_size as f32;
-            pos2(pos.fract(), pos.floor() / (y_count - 1) as f32)
-        });
-
-        if points[0].y == points[1].y {
-            lines_segments.push([points[0], points[1]]);
-        } else {
-            lines_segments.push([points[0], pos2(1.0, points[0].y)]);
-            for i in 1..((points[1].y - points[0].y) * (y_count - 1) as f32).round() as u32 {
-                let y = points[0].y + i as f32 / (y_count - 1) as f32;
-                lines_segments.push([pos2(0.0, y), pos2(1.0, y)]);
-            }
-            lines_segments.push([pos2(0.0, points[1].y), points[1]]);
-        }
+impl Segments {
+    fn build<I>(iter: I, start_ts: u64, stop_ts: u64, x_size: u64) -> Segments
+    where
+        I: IntoIterator<Item = (u64, EventType)>,
+    {
+        let y_step = 1.0 / ((stop_ts - start_ts) as f32 / x_size as f32 - 1.0).ceil();
+        let mut prev_ts = Default::default();
+        let vec = iter
+            .into_iter()
+            .map(|(ts, ev)| {
+                let pos = (ts - start_ts) as f32 / x_size as f32;
+                (pos2(pos.fract(), pos.trunc() * y_step), ev)
+            })
+            .filter_map(|(ts, ev)| match ev {
+                EventType::Running => None,
+                EventType::Started | EventType::Resumed => {
+                    prev_ts = ts;
+                    None
+                }
+                EventType::Stopped | EventType::Suspended => Some([prev_ts, ts]),
+            })
+            .flat_map(Regen::dy(y_step))
+            .collect();
+        Segments { 0: vec }
     }
 
-    lines_segments
+    fn from_points(a: Pos2, b: Pos2, dy: f32) -> Segments {
+        Segments {
+            0: Regen::dy(dy)([a, b]).collect(),
+        }
+    }
+}
+
+struct Regen {
+    segment: [Pos2; 2],
+    n: i32,
+    i: i32,
+}
+
+impl Iterator for Regen {
+    type Item = [Pos2; 2];
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.i += 1;
+        match self.i {
+            1 if self.n == 1 => Some(self.segment),
+            1 => Some([self.segment[0], pos2(1.0, self.segment[0].y)]),
+            i if i == self.n => Some([pos2(0.0, self.segment[1].y), self.segment[1]]),
+            i if i < self.n => {
+                let y =
+                    (self.segment[1].y - self.segment[0].y) / (self.n - 1) as f32 * (i - 1) as f32;
+                Some([pos2(0.0, y), pos2(1.0, y)])
+            }
+            _ => None,
+        }
+    }
+}
+
+impl Regen {
+    fn dy(dy: f32) -> impl FnMut([Pos2; 2]) -> Regen {
+        move |segment| Regen {
+            segment,
+            n: ((segment[1].y - segment[0].y) / dy).round() as i32 + 1,
+            i: 0,
+        }
+    }
+}
+
+fn load_test_data() -> Segments {
+    let conn = Connection::open("./deck.db").unwrap();
+    let mut stmt = conn
+        .prepare(
+            "select timestamp, event_type from events \
+            where object_id = ?1 and ?2 <= timestamp and timestamp < ?3",
+        )
+        .unwrap();
+
+    let start_ts = 1738357200;
+    let stop_ts = 1740776400;
+    let x_size = 24 * 60 * 60;
+
+    let iter = stmt
+        .query_map((1, start_ts, stop_ts), |row: &rusqlite::Row<'_>| {
+            Ok((row.get::<_, u64>(0)?, row.get::<_, EventType>(1)?))
+        })
+        .unwrap()
+        .filter_map(Result::ok);
+    Segments::build(iter, start_ts, stop_ts, x_size)
 }
 
 fn paint_segments(
@@ -82,15 +161,12 @@ struct MyApp {
 
 impl Default for MyApp {
     fn default() -> Self {
-        let segments = ts_to_segments(load_test_data(), 1738357200, 24 * 60 * 60, 31)
-            .into_iter()
-            .filter(|[a, b]| a.distance_sq(*b) > 0.00001)
-            .collect::<Segments>();
+        let segments = load_test_data();
         println!("{}", segments.len());
         Self {
             selected: NAMES[0],
             segments,
-            segments_back: ts_to_segments(vec![[0, 24 * 60 * 60 * 31]], 0, 24 * 60 * 60, 31),
+            segments_back: Segments::from_points(pos2(0.0, 0.0), pos2(1.0, 1.0), 1.0 / 27.0),
         }
     }
 }
