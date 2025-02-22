@@ -40,6 +40,12 @@ impl types::FromSql for EventType {
 
 struct Segments(Vec<[Pos2; 2]>);
 
+impl Default for Segments {
+    fn default() -> Self {
+        Self(Default::default())
+    }
+}
+
 impl std::ops::Deref for Segments {
     type Target = Vec<[Pos2; 2]>;
     fn deref(&self) -> &Self::Target {
@@ -58,13 +64,11 @@ impl Segments {
         I: IntoIterator<Item = (u64, EventType)>,
     {
         let y_step = 1.0 / ((stop_ts - start_ts) as f32 / x_size as f32 - 1.0).ceil();
-        let mut prev_ts = Default::default();
+
+        let mut prev_ts = start_ts;
         let vec = iter
             .into_iter()
-            .map(|(ts, ev)| {
-                let pos = (ts - start_ts) as f32 / x_size as f32;
-                (pos2(pos.fract(), pos.trunc() * y_step), ev)
-            })
+            .filter(|e| start_ts <= e.0 && e.0 < stop_ts)
             .filter_map(|(ts, ev)| match ev {
                 EventType::Running => None,
                 EventType::Started | EventType::Resumed => {
@@ -73,8 +77,15 @@ impl Segments {
                 }
                 EventType::Stopped | EventType::Suspended => Some([prev_ts, ts]),
             })
+            .map(|segment| {
+                segment.map(|ts| {
+                    let pos = (ts - start_ts) as f32 / x_size as f32;
+                    pos2(pos.fract(), pos.trunc() * y_step)
+                })
+            })
             .flat_map(Regen::dy(y_step))
             .collect();
+
         Segments { 0: vec }
     }
 
@@ -120,28 +131,6 @@ impl Regen {
     }
 }
 
-fn load_test_data() -> Segments {
-    let conn = Connection::open("./deck.db").unwrap();
-    let mut stmt = conn
-        .prepare(
-            "select timestamp, event_type from events \
-            where object_id = ?1 and ?2 <= timestamp and timestamp < ?3",
-        )
-        .unwrap();
-
-    let start_ts = 1738357200;
-    let stop_ts = 1740776400;
-    let x_size = 24 * 60 * 60;
-
-    let iter = stmt
-        .query_map((1, start_ts, stop_ts), |row: &rusqlite::Row<'_>| {
-            Ok((row.get::<_, u64>(0)?, row.get::<_, EventType>(1)?))
-        })
-        .unwrap()
-        .filter_map(Result::ok);
-    Segments::build(iter, start_ts, stop_ts, x_size)
-}
-
 fn paint_segments(
     painter: &Painter,
     to_screen: &emath::RectTransform,
@@ -154,25 +143,66 @@ fn paint_segments(
 }
 
 struct MyApp {
-    selected: &'static str,
-    segments: Segments,
-    segments_back: Segments,
+    conn: Connection,
+    selected: u64,
+    object_id: u64,
+    range: [u64; 3],
+    foreground: Segments,
+    background: Segments,
 }
 
 impl Default for MyApp {
     fn default() -> Self {
-        let segments = load_test_data();
-        println!("{}", segments.len());
-        Self {
-            selected: NAMES[0],
-            segments,
-            segments_back: Segments::from_points(pos2(0.0, 0.0), pos2(1.0, 1.0), 1.0 / 27.0),
-        }
+        let conn = Connection::open("./deck.db").unwrap();
+
+        let mut app = Self {
+            conn,
+            selected: 1,
+            range: [1738357200, 1740776400, 24 * 60 * 60],
+            object_id: 0,
+            foreground: Default::default(),
+            background: Default::default(),
+        };
+
+        app.load_data();
+
+        app
+    }
+}
+
+impl MyApp {
+    fn load_data(&mut self) {
+        let mut stmt = self
+            .conn
+            .prepare(
+                "select timestamp, event_type from events \
+                where object_id = ?1 and ?2 <= timestamp and timestamp < ?3",
+            )
+            .unwrap();
+
+        let [start_ts, stop_ts, x_size] = self.range;
+
+        let iter = stmt
+            .query_map(
+                (self.selected, start_ts, stop_ts),
+                |row: &rusqlite::Row<'_>| Ok((row.get::<_, u64>(0)?, row.get::<_, EventType>(1)?)),
+            )
+            .unwrap()
+            .filter_map(Result::ok);
+
+        self.foreground = Segments::build(iter, start_ts, stop_ts, x_size);
+
+        let dy = 1.0 / ((stop_ts - start_ts) as f32 / x_size as f32 - 1.0).ceil();
+        self.background = Segments::from_points(pos2(0.0, 0.0), pos2(1.0, 1.0), dy);
     }
 }
 
 impl eframe::App for MyApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        if self.object_id != self.selected {
+            self.object_id = self.selected;
+            self.load_data();
+        }
         egui::SidePanel::right("my_left_panel")
             .resizable(false)
             .show(ctx, |ui| {
@@ -180,8 +210,8 @@ impl eframe::App for MyApp {
                 egui::ComboBox::from_id_salt("combo")
                     .selected_text(format!("{}", self.selected))
                     .show_ui(ui, |ui| {
-                        for name in NAMES {
-                            ui.selectable_value(&mut self.selected, name, name);
+                        for i in 1..100 {
+                            ui.selectable_value(&mut self.selected, i, i.to_string());
                         }
                     });
                 if ui
@@ -202,13 +232,13 @@ impl eframe::App for MyApp {
             paint_segments(
                 &painter,
                 &to_screen,
-                &self.segments_back,
+                &self.background,
                 Stroke::new(0.1, Color32::GRAY),
             );
             paint_segments(
                 &painter,
                 &to_screen,
-                &self.segments,
+                &self.foreground,
                 Stroke::new(5.0, Color32::RED),
             );
         });
