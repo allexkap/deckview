@@ -38,8 +38,9 @@ impl DeckDBv {
 
     pub fn load_sessions(&self, app_id: AppId, start: u64, stop: u64) -> Result<Sessions> {
         let mut stmt = self.conn.prepare(
-            "select timestamp, event_type from events \
-                where object_id = ?1 and ?2 <= timestamp and timestamp < ?3",
+            "select timestamp, event_type from events where \
+            object_id = (select object_id from objects where app_id = ?1) \
+            and ?2 <= timestamp and timestamp < ?3",
         )?;
 
         let mut prev_ts = start;
@@ -62,5 +63,18 @@ impl DeckDBv {
         );
 
         Ok(sessions)
+    }
+
+    pub fn load_apps(&self) -> Result<Vec<(AppId, String)>> {
+        let mut stmt = self
+            .conn
+            .prepare("select app_id, coalesce(alias, concat(\":\", app_id)) from objects;")?;
+
+        let apps = stmt
+            .query_map((), |row| Ok((row.get(0)?, row.get(1)?)))?
+            .filter_map(Result::ok)
+            .collect();
+
+        Ok(apps)
     }
 }

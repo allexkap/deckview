@@ -1,11 +1,12 @@
 use egui::{Color32, FontId, Painter, Pos2, Rect, Stroke, pos2};
 
-use crate::db::{DeckDBv, Sessions};
+use crate::db::{AppId, DeckDBv, Sessions};
 
 pub struct Viewer {
     db: DeckDBv,
-    selected: u32,
-    object_id: u32,
+    apps: Vec<(AppId, String)>,
+    loaded: usize,
+    selected: usize,
     range: [u64; 3],
     foreground: Segments,
     background: Segments,
@@ -14,39 +15,35 @@ pub struct Viewer {
 impl Default for Viewer {
     fn default() -> Self {
         let db = DeckDBv::open("./deck.db").unwrap();
+        let apps = db.load_apps().unwrap();
 
-        let mut app = Self {
+        Self {
             db,
-            selected: 1,
+            apps,
+            loaded: 1, // != selected
+            selected: 0,
             range: [1738357200, 1740776400, 24 * 60 * 60],
-            object_id: 0,
             foreground: Default::default(),
             background: Default::default(),
-        };
-
-        app.load_data();
-
-        app
+        }
     }
 }
 
 impl eframe::App for Viewer {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        if self.object_id != self.selected {
-            self.object_id = self.selected;
+        if self.loaded != self.selected {
+            self.loaded = self.selected;
             self.load_data();
         }
+
         egui::SidePanel::right("my_left_panel")
             .resizable(false)
             .show(ctx, |ui| {
                 ui.add_space(8.0);
                 egui::ComboBox::from_id_salt("combo")
-                    .selected_text(format!("{}", self.selected))
-                    .show_ui(ui, |ui| {
-                        for i in 1..100 {
-                            ui.selectable_value(&mut self.selected, i, i.to_string());
-                        }
-                    });
+                    .selected_text(&self.apps[self.selected].1)
+                    .truncate()
+                    .show_index(ui, &mut self.selected, self.apps.len(), |i| &self.apps[i].1);
                 if ui
                     .add(egui::Button::new("Close").min_size(egui::vec2(100.0, 0.0)))
                     .clicked()
@@ -54,6 +51,7 @@ impl eframe::App for Viewer {
                     ctx.send_viewport_cmd(egui::ViewportCommand::Close);
                 }
             });
+
         egui::CentralPanel::default().show(ctx, |ui| {
             let (_id, rect) = ui.allocate_space(ui.available_size());
             let to_screen = egui::emath::RectTransform::from_to(
@@ -62,19 +60,12 @@ impl eframe::App for Viewer {
             );
             let painter = ui.painter_at(rect);
 
-            paint_segments(
-                &painter,
-                &to_screen,
-                &self.background,
-                Stroke::new(0.1, Color32::GRAY),
-            );
-            paint_segments(
-                &painter,
-                &to_screen,
-                &self.foreground,
-                Stroke::new(5.0, Color32::RED),
-            );
+            self.foreground
+                .paint(&painter, &to_screen, Stroke::new(5.0, Color32::RED));
+            self.background
+                .paint(&painter, &to_screen, Stroke::new(0.1, Color32::GRAY));
 
+            // paint vertical lines
             let stroke = Stroke::new(0.1, Color32::GRAY);
             for i in [6, 12, 18] {
                 let x = i as f32 / 24.0;
@@ -95,7 +86,8 @@ impl eframe::App for Viewer {
                 );
             }
 
-            let n = 28;
+            // print day numbers
+            let n = 28; // todo
             for i in 0..n {
                 painter.text(
                     to_screen * pos2(0.0, i as f32 / (n - 1) as f32),
@@ -115,7 +107,7 @@ impl Viewer {
 
         let sessions = self
             .db
-            .load_sessions(self.object_id, start_ts, stop_ts)
+            .load_sessions(self.apps[self.loaded as usize].0, start_ts, stop_ts)
             .unwrap();
         self.foreground = Segments::build(sessions, start_ts, stop_ts, x_size);
 
@@ -169,6 +161,12 @@ impl Segments {
         Segments {
             0: Regen::dy(dy)([a, b]).collect(),
         }
+    }
+
+    fn paint(&self, painter: &Painter, to_screen: &egui::emath::RectTransform, stroke: Stroke) {
+        self.0.iter().for_each(|segment| {
+            painter.line_segment(segment.map(|p| to_screen * p), stroke);
+        })
     }
 }
 
@@ -228,15 +226,5 @@ fn dashed_line_segment(
         painter.line_segment([pos, dash_end_pos], stroke);
         pos = dash_end_pos + gap;
     }
-}
-
-fn paint_segments(
-    painter: &Painter,
-    to_screen: &egui::emath::RectTransform,
-    segments: &Segments,
-    stroke: Stroke,
-) {
-    segments.iter().for_each(|segment| {
-        painter.line_segment(segment.map(|p| to_screen * p), stroke);
-    })
+    painter.line_segment([pos, points[1]], stroke);
 }
