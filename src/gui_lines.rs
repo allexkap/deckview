@@ -88,26 +88,8 @@ impl LineView {
     }
 }
 
+#[derive(Default, derive_more::Deref, derive_more::DerefMut)]
 struct Segments(Vec<[Pos2; 2]>);
-
-impl Default for Segments {
-    fn default() -> Self {
-        Self(Default::default())
-    }
-}
-
-impl std::ops::Deref for Segments {
-    type Target = Vec<[Pos2; 2]>;
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl std::ops::DerefMut for Segments {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
-    }
-}
 
 impl Segments {
     fn build(sessions: Sessions, start_ts: u64, stop_ts: u64, x_size: u64) -> Segments {
