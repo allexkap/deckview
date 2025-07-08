@@ -29,6 +29,14 @@ pub struct DeckDBv {
     conn: Connection,
 }
 
+impl Default for DeckDBv {
+    fn default() -> Self {
+        Self {
+            conn: Connection::open(":memory:").unwrap(),
+        }
+    }
+}
+
 impl DeckDBv {
     pub fn open(path: &str) -> Result<DeckDBv> {
         let conn = Connection::open(path)?;
