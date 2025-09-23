@@ -42,24 +42,24 @@ impl crate::gui::View for GridView {
         Default::default()
     }
 
+    fn update(&mut self, view_params: crate::gui::ViewParams) {}
+
     fn ui(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
             for row in self.content.iter() {
                 ui.vertical(|ui| {
                     for cell in row.iter() {
-                        ui.horizontal(|ui| {
-                            let desired_size = [self.cell_size, self.cell_size].into();
-                            let response = ui.allocate_response(desired_size, egui::Sense::hover());
+                        let desired_size = [self.cell_size, self.cell_size].into();
+                        let response = ui.allocate_response(desired_size, egui::Sense::hover());
 
-                            let color = egui::Color32::GREEN.gamma_multiply(cell.value);
+                        let color = egui::Color32::GREEN.gamma_multiply(cell.value);
 
-                            if response.hovered() {
-                                response.show_tooltip_text(&cell.tooltip);
-                            }
+                        if response.hovered() {
+                            response.show_tooltip_text(&cell.tooltip);
+                        }
 
-                            let painter = ui.painter_at(response.rect);
-                            painter.rect_filled(response.rect, 10.0, color);
-                        });
+                        let painter = ui.painter_at(response.rect);
+                        painter.rect_filled(response.rect, 10.0, color);
                     }
                 });
             }

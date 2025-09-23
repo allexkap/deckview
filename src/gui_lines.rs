@@ -22,6 +22,11 @@ impl crate::gui::View for LineView {
         view
     }
 
+    fn update(&mut self, view_params: crate::gui::ViewParams) {
+        self.view_params = view_params;
+        self.load_data();
+    }
+
     fn ui(&mut self, ui: &mut egui::Ui) {
         let (_id, rect) = ui.allocate_space(ui.available_size());
         let to_screen =
