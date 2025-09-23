@@ -23,8 +23,9 @@ pub struct Viewer {
 
     view: Box<dyn View>,
     view_type_id: usize,
-
     view_params: ViewParams,
+
+    date_mode_id: usize,
 
     apps: Vec<(u32, String)>,
 }
@@ -34,7 +35,7 @@ impl Viewer {
         let ref_db = Rc::new(RefCell::new(db));
 
         let end = chrono::Local::now().date_naive();
-        let start = end - chrono::Duration::days(28);
+        let start = end - chrono::Duration::days(14);
 
         let apps = ref_db.borrow().load_apps().unwrap();
         let selected_app = 0;
@@ -53,12 +54,15 @@ impl Viewer {
             view,
             view_type_id,
             view_params: params,
+            date_mode_id: 0,
             apps,
         }
     }
 
     fn select_view_type(&mut self, ui: &mut egui::Ui) {
         const VIEW_TITLES: [&str; 2] = ["Grid", "Lines"];
+
+        ui.heading("View type");
         if !egui::ComboBox::from_id_salt("select_view_type")
             .selected_text(VIEW_TITLES[self.view_type_id])
             .show_index(ui, &mut self.view_type_id, VIEW_TITLES.len(), |i| {
@@ -78,6 +82,7 @@ impl Viewer {
     }
 
     fn select_app(&mut self, ui: &mut egui::Ui) {
+        ui.heading("App");
         if !egui::ComboBox::from_id_salt("select_app")
             .selected_text(&self.apps[self.view_params.selected_app].1)
             .truncate()
@@ -95,7 +100,89 @@ impl Viewer {
         self.view.update(self.view_params);
     }
 
+    fn select_date(&mut self, ui: &mut egui::Ui) {
+        const DATE_MODES: [&str; 3] = ["Day", "Week", "Month"];
+
+        ui.heading("Date");
+
+        ui.label("Interval");
+        egui::ComboBox::from_id_salt("select_date")
+            .selected_text(DATE_MODES[self.date_mode_id])
+            .show_index(ui, &mut self.date_mode_id, DATE_MODES.len(), |i| {
+                DATE_MODES[i]
+            });
+
+        ui.label("From");
+        ui.add_sized(
+            [100.0, 0.0],
+            egui::TextEdit::singleline(&mut self.view_params.range[0].to_string()),
+        );
+        ui.horizontal(|ui| {
+            if ui
+                .add(egui::Button::new("-").min_size(egui::vec2(46.0, 0.0)))
+                .clicked()
+            {
+                self.view_params.range[0] -= chrono::TimeDelta::days(1);
+            }
+            if ui
+                .add(egui::Button::new("+").min_size(egui::vec2(46.0, 0.0)))
+                .clicked()
+            {
+                self.view_params.range[0] += chrono::TimeDelta::days(1);
+            }
+        });
+
+        ui.label("To");
+        ui.add_sized(
+            [100.0, 0.0],
+            egui::TextEdit::singleline(&mut self.view_params.range[1].to_string()),
+        );
+        ui.horizontal(|ui| {
+            if ui
+                .add(egui::Button::new("-").min_size(egui::vec2(46.0, 0.0)))
+                .clicked()
+            {
+                self.view_params.range[1] -= chrono::TimeDelta::days(1);
+            }
+            if ui
+                .add(egui::Button::new("+").min_size(egui::vec2(46.0, 0.0)))
+                .clicked()
+            {
+                self.view_params.range[1] += chrono::TimeDelta::days(1);
+            }
+        });
+
+        ui.label("Move");
+        ui.horizontal(|ui| {
+            if ui
+                .add(egui::Button::new("<").min_size(egui::vec2(46.0, 0.0)))
+                .clicked()
+            {}
+            if ui
+                .add(egui::Button::new(">").min_size(egui::vec2(46.0, 0.0)))
+                .clicked()
+            {}
+        });
+        ui.horizontal(|ui| {
+            if ui
+                .add(egui::Button::new("<<").min_size(egui::vec2(46.0, 0.0)))
+                .clicked()
+            {}
+            if ui
+                .add(egui::Button::new(">>").min_size(egui::vec2(46.0, 0.0)))
+                .clicked()
+            {}
+        });
+    }
+
     fn close_btn(&mut self, ui: &mut egui::Ui) {
+        ui.heading("Actions");
+        if ui
+            .add(egui::Button::new("Update").min_size(egui::vec2(100.0, 0.0)))
+            .clicked()
+        {
+            self.view.update(self.view_params);
+        }
         if ui
             .add(egui::Button::new("Close").min_size(egui::vec2(100.0, 0.0)))
             .clicked()
@@ -110,10 +197,14 @@ impl eframe::App for Viewer {
         egui::SidePanel::right("right")
             .resizable(false)
             .show(ctx, |ui| {
-                ui.add_space(8.0);
-
+                const PADDING: f32 = 10.0;
+                ui.add_space(6.0);
                 self.select_view_type(ui);
+                ui.add_space(PADDING);
+                self.select_date(ui);
+                ui.add_space(PADDING);
                 self.select_app(ui);
+                ui.add_space(PADDING);
                 self.close_btn(ui);
             });
 
