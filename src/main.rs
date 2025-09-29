@@ -2,6 +2,7 @@ mod db;
 mod gui;
 mod gui_grid;
 mod gui_lines;
+mod widgets;
 
 fn main() -> eframe::Result {
     env_logger::init();

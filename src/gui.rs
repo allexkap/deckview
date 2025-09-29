@@ -1,7 +1,7 @@
 use log::info;
 use std::{cell::RefCell, rc::Rc};
 
-use crate::{gui_grid::GridView, gui_lines::LineView};
+use crate::{gui_grid::GridView, gui_lines::LineView, widgets::DateSelector};
 
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct ViewParams {
@@ -26,6 +26,8 @@ pub struct Viewer {
     view_params: ViewParams,
 
     date_mode_id: usize,
+
+    date: chrono::NaiveDate,
 
     apps: Vec<(u32, String)>,
 }
@@ -56,6 +58,7 @@ impl Viewer {
             view_params: params,
             date_mode_id: 0,
             apps,
+            date: chrono::Local::now().date_naive(),
         }
     }
 
@@ -206,6 +209,7 @@ impl eframe::App for Viewer {
                 self.select_app(ui);
                 ui.add_space(PADDING);
                 self.close_btn(ui);
+                ui.add(DateSelector::new(&mut self.date));
             });
 
         egui::CentralPanel::default().show(ctx, |ui| self.view.ui(ui));
