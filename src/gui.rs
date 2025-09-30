@@ -3,6 +3,8 @@ use std::{cell::RefCell, rc::Rc};
 
 use crate::{gui_grid::GridView, gui_lines::LineView, widgets::DateSelector};
 
+const PADDING: f32 = 10.0;
+
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct ViewParams {
     pub range: [chrono::NaiveDate; 2],
@@ -26,8 +28,6 @@ pub struct Viewer {
     view_params: ViewParams,
 
     date_mode_id: usize,
-
-    date: chrono::NaiveDate,
 
     apps: Vec<(u32, String)>,
 }
@@ -58,7 +58,6 @@ impl Viewer {
             view_params: params,
             date_mode_id: 0,
             apps,
-            date: chrono::Local::now().date_naive(),
         }
     }
 
@@ -108,74 +107,12 @@ impl Viewer {
 
         ui.heading("Date");
 
-        ui.label("Interval");
-        egui::ComboBox::from_id_salt("select_date")
-            .selected_text(DATE_MODES[self.date_mode_id])
-            .show_index(ui, &mut self.date_mode_id, DATE_MODES.len(), |i| {
-                DATE_MODES[i]
-            });
-
         ui.label("From");
-        ui.add_sized(
-            [100.0, 0.0],
-            egui::TextEdit::singleline(&mut self.view_params.range[0].to_string()),
-        );
-        ui.horizontal(|ui| {
-            if ui
-                .add(egui::Button::new("-").min_size(egui::vec2(46.0, 0.0)))
-                .clicked()
-            {
-                self.view_params.range[0] -= chrono::TimeDelta::days(1);
-            }
-            if ui
-                .add(egui::Button::new("+").min_size(egui::vec2(46.0, 0.0)))
-                .clicked()
-            {
-                self.view_params.range[0] += chrono::TimeDelta::days(1);
-            }
-        });
+        ui.add(DateSelector::new(&mut self.view_params.range[0]));
+        ui.add_space(PADDING);
 
         ui.label("To");
-        ui.add_sized(
-            [100.0, 0.0],
-            egui::TextEdit::singleline(&mut self.view_params.range[1].to_string()),
-        );
-        ui.horizontal(|ui| {
-            if ui
-                .add(egui::Button::new("-").min_size(egui::vec2(46.0, 0.0)))
-                .clicked()
-            {
-                self.view_params.range[1] -= chrono::TimeDelta::days(1);
-            }
-            if ui
-                .add(egui::Button::new("+").min_size(egui::vec2(46.0, 0.0)))
-                .clicked()
-            {
-                self.view_params.range[1] += chrono::TimeDelta::days(1);
-            }
-        });
-
-        ui.label("Move");
-        ui.horizontal(|ui| {
-            if ui
-                .add(egui::Button::new("<").min_size(egui::vec2(46.0, 0.0)))
-                .clicked()
-            {}
-            if ui
-                .add(egui::Button::new(">").min_size(egui::vec2(46.0, 0.0)))
-                .clicked()
-            {}
-        });
-        ui.horizontal(|ui| {
-            if ui
-                .add(egui::Button::new("<<").min_size(egui::vec2(46.0, 0.0)))
-                .clicked()
-            {}
-            if ui
-                .add(egui::Button::new(">>").min_size(egui::vec2(46.0, 0.0)))
-                .clicked()
-            {}
-        });
+        ui.add(DateSelector::new(&mut self.view_params.range[1]));
     }
 
     fn close_btn(&mut self, ui: &mut egui::Ui) {
@@ -200,7 +137,6 @@ impl eframe::App for Viewer {
         egui::SidePanel::right("right")
             .resizable(false)
             .show(ctx, |ui| {
-                const PADDING: f32 = 10.0;
                 ui.add_space(6.0);
                 self.select_view_type(ui);
                 ui.add_space(PADDING);
@@ -209,7 +145,6 @@ impl eframe::App for Viewer {
                 self.select_app(ui);
                 ui.add_space(PADDING);
                 self.close_btn(ui);
-                ui.add(DateSelector::new(&mut self.date));
             });
 
         egui::CentralPanel::default().show(ctx, |ui| self.view.ui(ui));
