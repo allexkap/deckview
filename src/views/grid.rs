@@ -1,6 +1,9 @@
-use std::{cell::RefCell, rc::Rc};
-
+use crate::{
+    db::DeckDBv,
+    views::{View, ViewParams},
+};
 use rand::Rng;
+use std::{cell::RefCell, rc::Rc};
 
 struct Cell {
     value: f32,
@@ -8,8 +11,8 @@ struct Cell {
 }
 
 pub struct GridView {
-    db: Rc<RefCell<crate::db::DeckDBv>>,
-    view_params: crate::gui::ViewParams,
+    db: Rc<RefCell<DeckDBv>>,
+    view_params: ViewParams,
     content: Vec<Vec<Cell>>,
     cell_size: f32,
 }
@@ -37,12 +40,12 @@ impl Default for GridView {
     }
 }
 
-impl crate::gui::View for GridView {
-    fn build(db: Rc<RefCell<crate::db::DeckDBv>>, view_params: crate::gui::ViewParams) -> Self {
+impl View for GridView {
+    fn build(db: Rc<RefCell<DeckDBv>>, view_params: ViewParams) -> Self {
         Default::default()
     }
 
-    fn update(&mut self, view_params: crate::gui::ViewParams) {}
+    fn update(&mut self, view_params: ViewParams) {}
 
     fn ui(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {

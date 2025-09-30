@@ -1,17 +1,19 @@
+use crate::{
+    db::{DeckDBv, Sessions},
+    views::{View, ViewParams},
+};
+use egui::{Color32, Painter, Pos2, Rect, Stroke, emath::RectTransform, pos2};
 use std::{cell::RefCell, rc::Rc};
 
-use crate::db::Sessions;
-use egui::{Color32, Painter, Pos2, Rect, Stroke, emath::RectTransform, pos2};
-
 pub struct LineView {
-    db: Rc<RefCell<crate::db::DeckDBv>>,
-    view_params: crate::gui::ViewParams,
+    db: Rc<RefCell<DeckDBv>>,
+    view_params: ViewParams,
     foreground: Segments,
     background: Segments,
 }
 
-impl crate::gui::View for LineView {
-    fn build(db: Rc<RefCell<crate::db::DeckDBv>>, view_params: crate::gui::ViewParams) -> Self {
+impl View for LineView {
+    fn build(db: Rc<RefCell<DeckDBv>>, view_params: ViewParams) -> Self {
         let mut view = Self {
             db,
             view_params,
@@ -22,7 +24,7 @@ impl crate::gui::View for LineView {
         view
     }
 
-    fn update(&mut self, view_params: crate::gui::ViewParams) {
+    fn update(&mut self, view_params: ViewParams) {
         self.view_params = view_params;
         self.load_data();
     }

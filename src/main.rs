@@ -1,7 +1,5 @@
 mod db;
-mod gui;
-mod gui_grid;
-mod gui_lines;
+mod views;
 mod widgets;
 
 fn main() -> eframe::Result {
@@ -16,6 +14,6 @@ fn main() -> eframe::Result {
     eframe::run_native(
         "Deckview",
         options,
-        Box::new(|_cc| Ok(Box::new(gui::Viewer::build(db)))),
+        Box::new(|_cc| Ok(Box::new(views::Viewer::build(db)))),
     )
 }

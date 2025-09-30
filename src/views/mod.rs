@@ -1,27 +1,32 @@
+use crate::{db::DeckDBv, widgets::DateSelector};
+use chrono::NaiveDate;
 use log::info;
 use std::{cell::RefCell, rc::Rc};
+mod grid;
+mod line;
 
-use crate::{gui_grid::GridView, gui_lines::LineView, widgets::DateSelector};
+pub use grid::GridView;
+pub use line::LineView;
 
 const PADDING: f32 = 10.0;
 
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub struct ViewParams {
-    pub range: [chrono::NaiveDate; 2],
+    pub range: [NaiveDate; 2],
     pub selected_app: usize,
     pub selected_app_id: u32, // :<
 }
 
 pub trait View {
-    fn build(db: Rc<RefCell<crate::db::DeckDBv>>, view_params: ViewParams) -> Self
+    fn build(db: Rc<RefCell<DeckDBv>>, view_params: ViewParams) -> Self
     where
         Self: Sized;
-    fn update(&mut self, view_params: crate::gui::ViewParams);
+    fn update(&mut self, view_params: ViewParams);
     fn ui(&mut self, ui: &mut egui::Ui);
 }
 
 pub struct Viewer {
-    db: Rc<RefCell<crate::db::DeckDBv>>,
+    db: Rc<RefCell<DeckDBv>>,
 
     view: Box<dyn View>,
     view_type_id: usize,
@@ -33,7 +38,7 @@ pub struct Viewer {
 }
 
 impl Viewer {
-    pub fn build(db: crate::db::DeckDBv) -> Self {
+    pub fn build(db: DeckDBv) -> Self {
         let ref_db = Rc::new(RefCell::new(db));
 
         let end = chrono::Local::now().date_naive();
