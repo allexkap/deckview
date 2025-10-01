@@ -32,7 +32,7 @@ impl View for LineView {
     fn ui(&mut self, ui: &mut egui::Ui) {
         let (_id, rect) = ui.allocate_space(ui.available_size());
         let to_screen =
-            RectTransform::from_to(Rect::from_x_y_ranges(-0.02..=1.02, -0.02..=1.02), rect);
+            RectTransform::from_to(Rect::from_x_y_ranges(-0.04..=1.02, -0.02..=1.02), rect);
         let painter = ui.painter_at(rect);
 
         self.foreground
@@ -61,13 +61,23 @@ impl View for LineView {
             );
         }
 
-        // print day numbers
-        let n = 28; // todo
-        for i in 0..n {
+        let total_days: usize = (self.view_params.range[1] - self.view_params.range[0])
+            .num_days()
+            .try_into()
+            .unwrap();
+        let step = total_days / 40;
+        for (i, day) in self.view_params.range[0]
+            .iter_days()
+            .take(total_days)
+            .enumerate()
+        {
+            if step != 0 && i % (step + 1) != 0 {
+                continue;
+            }
             painter.text(
-                to_screen * pos2(0.0, i as f32 / (n - 1) as f32),
+                to_screen * pos2(0.0, i as f32 / (total_days - 1) as f32),
                 egui::Align2::RIGHT_CENTER,
-                format!("{}  ", i + 1),
+                day.format("%d.%m  "),
                 egui::FontId::default(),
                 Color32::GRAY,
             );
